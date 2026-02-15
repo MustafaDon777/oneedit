@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneEdit | Quick Txt</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+
+    <style>
+        :root { --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* Themes */
+        :root[data-theme="dark"] { --bg: #0a0f14; --panel: #121922; --text: #e4e4e4; --accent: #0059ff; --border: #30363d; --toggle-bg: #21262d; }
+        :root[data-theme="light"] { --bg: #ffffff; --panel: #f6f8fa; --text: #24292f; --accent: #0969da; --border: #d0d7de; --toggle-bg: #dee2e6; }
+        :root[data-theme="midnight"] { --bg: #000000; --panel: #1a1a1a; --text: #b1bed3; --accent: #0c0018; --border: #333333; --toggle-bg: #2d2d2d; }
+        :root[data-theme="night"] { --bg: #131414; --panel: #1a1a1a; --text: #ffc343; --accent: #a04000; --border: #333333; --toggle-bg: #2d2d2d; }
+
+        :root[data-theme="moon"] { --bg: #1f2527; --panel: #2f3435; --text: #fff7cb; --accent: #6b98ad; --border: #34484b; --toggle-bg: #282e33; }
+        :root[data-theme="dusk"] { --bg: #000136; --panel: #190072; --text: #ffc013; --accent: #cc00ff; --border: #2b00a0; --toggle-bg: #0d0025; }
+        :root[data-theme="might"] { --bg: #1a0c4d; --panel: #2a0763; --text: #8affce; --accent: #2f0f69; --border: #42006e; --toggle-bg: #280049; }
+
+        :root[data-theme="forest"] { --bg: #1b1f1c; --panel: #2d332e; --text: #e1efe1; --accent: #81c784; --border: #3e473f; --toggle-bg: #3a423b; }
+        :root[data-theme="sepia"] { --bg: #f4ecd8; --panel: #e4d5b7; --text: #5b4636; --accent: #a0522d; --border: #d3c2a3; --toggle-bg: #dccdb0; }
+
+        body { 
+            margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); 
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* --- Toolbar --- */
+        .toolbar { display: flex; flex-direction: column; background: var(--panel); z-index: 1000; }
+        .tool-row { display: flex; align-items: center; gap: 12px; padding: 10px 15px; }
+        .extra-tools { display: none; border-top: 1px solid var(--border); padding: 8px 15px; }
+        .extra-tools.active { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        @media (max-width: 768px) {
+            .toolbar { position: fixed; bottom: 0; left: 0; right: 0; border-top: 1px solid var(--border); }
+            .workspace { margin-bottom: 70px; }
+        }
+        @media (min-width: 769px) {
+            .toolbar { border-bottom: 1px solid var(--border); flex-direction: row; justify-content: space-between; }
+            .extra-tools { display: flex !important; border: none !important; }
+            #minimizer { display: none; }
+        }
+
+        /* --- Internal Text Toggle --- */
+        .toggle-switch {
+            position: relative; width: 140px; height: 36px;
+            background: var(--toggle-bg); border-radius: 18px;
+            cursor: pointer; border: 1px solid var(--border);
+            user-select: none; overflow: hidden;
+        }
+        .toggle-labels {
+            position: absolute; width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: space-around;
+            font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--text);
+            opacity: 0.5; z-index: 1;
+        }
+        .toggle-thumb {
+            position: absolute; top: 3px; left: 3px;
+            width: 68px; height: 28px; background: var(--accent);
+            border-radius: 15px; transition: var(--transition);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 2;
+        }
+        .thumb-text {
+            color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+        }
+        
+        /* State Handling */
+        body[data-view="preview"] .toggle-thumb { transform: translateX(0); }
+        body[data-view="edit"] .toggle-thumb { transform: translateX(64px); }
+
+        /* --- Workspace --- */
+        .workspace { flex: 1; display: flex; overflow: hidden; }
+        #editor, #preview { flex: 1; padding: 30px; overflow-y: auto; font-size: 16px; line-height: 1.6; border: none; outline: none; background: transparent; color: inherit; }
+        #editor { font-family: 'Fira Code', monospace; resize: none; display: none; }
+
+        /* Preview specific styles */
+        #preview code { font-family: 'Fira Code', monospace; background: rgba(125,125,125,0.1); padding: 2px 4px; border-radius: 4px; }
+        #preview pre code { background: transparent; padding: 0; }
+
+        button, select {
+            background: var(--bg); color: var(--text); border: 1px solid var(--border);
+            padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .primary { background: var(--accent); color: #fff; border: none; }
+    </style>
+</head>
+<body data-view="preview" data-theme="dark">
+
+<div class="toolbar">
+    <div class="tool-row">
+        <button id="minimizer" onclick="toggleMenu()">☰</button>
+        
+        <div class="toggle-switch" onclick="toggleView()">
+            <div class="toggle-labels">
+                <span>PREV</span>
+                <span>EDIT</span>
+            </div>
+            <div class="toggle-thumb">
+                <span class="thumb-text" id="active-label">PREV</span>
+            </div>
+        </div>
+        <button onclick="undo()">Undo</button>
+        <button onclick="redo()">Redo</button>
+    </div>
+
+    <div class="tool-row extra-tools" id="extraTools">
+
+        <button class="primary" onclick="saveFile()">Save</button>
+        <select id="modeSelect" onchange="render()">
+            <option value="markdown">Markdown</option>
+            <option value="text">Text Only</option>
+        </select>
+        
+        <select id="themeSelect" onchange="setTheme(this.value)">
+            <option value="dark">Dark</option>
+            <option value="midnight">Midnight</option>
+            <option value="night">Night</option>
+            <option value="moon">Moon</option>
+            <option value="dusk">Dusk</option>
+            <option value="might">Might</option>
+            <option value="forest">Forest</option>
+            <option value="sepia">Sepia</option>
+            <option value="light">Light</option>
+        </select>
+        <button onclick="handleAction('cut')">Cut</button>
+        <button onclick="handleAction('copy')">Copy</button>
+        <button onclick="handleAction('paste')">Paste</button>
+        <button onclick="uploadFile()">Upload</button>
+    </div>
+</div>
+
+<div class="workspace">
+    <textarea id="editor" spellcheck="false" oninput="render()"># OneEdit
+## Activate your text mind fast
+No need for weird app "ugh".
+
+```python
+def oneEdit():
+    return "Simple is better than complex."
+```
+    </textarea>
+    <div id="preview"></div>
+</div>
+
+<script>
+    const editor = document.getElementById('editor');
+    const preview = document.getElementById('preview');
+    const extraTools = document.getElementById('extraTools');
+    const activeLabel = document.getElementById('active-label');
+
+    function init() {
+        const savedTheme = localStorage.getItem('one-theme') || 'dark';
+        setTheme(savedTheme);
+        document.getElementById('themeSelect').value = savedTheme;
+        render();
+    }
+
+    function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('one-theme', theme);
+    }
+
+    function toggleMenu() { extraTools.classList.toggle('active'); }
+
+    function toggleView() {
+        const currentView = document.body.getAttribute('data-view');
+        const nextView = currentView === 'preview' ? 'edit' : 'preview';
+        
+        document.body.setAttribute('data-view', nextView);
+        activeLabel.innerText = nextView.toUpperCase();
+        
+        if (nextView === 'preview') {
+            editor.style.display = 'none';
+            preview.style.display = 'block';
+            render();
+        } else {
+            editor.style.display = 'block';
+            preview.style.display = 'none';
+        }
+    }
+
+    function render() {
+        const mode = document.getElementById('modeSelect').value;
+        if (mode === 'markdown') {
+            // Parse Markdown
+            preview.innerHTML = marked.parse(editor.value);
+            // Trigger Prism highlighting on the new HTML
+            Prism.highlightAllUnder(preview);
+        } else {
+            preview.innerHTML = `<pre style="white-space: pre-wrap">${editor.value}</pre>`;
+        }
+    }
+
+    // Standard Actions
+    function undo() { document.execCommand('undo'); render(); }
+    function redo() { document.execCommand('redo'); render(); }
+    
+    function saveFile() {
+        const isMarkdown = document.getElementById('modeSelect').value === 'markdown';
+        const blob = new Blob([editor.value], {type: "text/plain"});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = isMarkdown ? "note.md" : "note.txt";
+        link.click();
+    }
+
+    function uploadFile() {
+        const input = document.createElement('input'); input.type = 'file';
+        input.onchange = e => {
+            const reader = new FileReader();
+            reader.onload = event => { editor.value = event.target.result; render(); };
+            reader.readAsText(e.target.files[0]);
+        };
+        input.click();
+    }
+
+    async function handleAction(type) {
+        let start = editor.selectionStart;
+        let end = editor.selectionEnd;
+
+        // If no text is selected, target the entire content
+        if (start === end && (type === 'copy' || type === 'cut')) {
+            start = 0;
+            end = editor.value.length;
+        }
+
+        if (type === 'copy') {
+            await navigator.clipboard.writeText(editor.value.substring(start, end));
+        }
+
+        if (type === 'cut') {
+            await navigator.clipboard.writeText(editor.value.substring(start, end));
+            editor.value = editor.value.substring(0, start) + editor.value.substring(end);
+            // Optional: Reset cursor to the start after cutting everything
+            editor.selectionStart = editor.selectionEnd = start;
+        }
+
+        if (type === 'paste') {
+            const text = await navigator.clipboard.readText();
+            editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+            // Optional: Move cursor to the end of the pasted text
+            const newCursorPos = start + text.length;
+            editor.selectionStart = editor.selectionEnd = newCursorPos;
+        }
+
+        render();
+    }
+
+    init();
+</script>
+</body>
+</html>
