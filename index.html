@@ -80,9 +80,23 @@
 
         /* --- Workspace --- */
         .workspace { flex: 1; display: flex; overflow: hidden; }
-        #editor, #preview { flex: 1; padding: 30px; overflow-y: auto; font-size: 16px; line-height: 1.6; border: none; outline: none; background: transparent; color: inherit; }
+        #editor, #preview { flex: 1; padding: 30px 10px; overflow-y: auto; font-size: 16px; line-height: 1.6; border: none; outline: none; background: transparent; color: inherit; }
         #editor { font-family: 'Fira Code', monospace; resize: none; display: none; }
+        #line-numbers {
+            width: 50px; background: var(--panel); color: var(--gutter-text);
+            text-align: center; padding: 30px 0; font-family: 'Fira Code', monospace; 
+            font-size: 16px; line-height: 1.6; user-select: none; border-right: 1px solid var(--border); overflow-y: auto; 
 
+            &::-webkit-scrollbar {
+                display: none;
+            }
+
+            /* 2. For Firefox */
+            scrollbar-width: none;
+
+            /* 3. For Internet Explorer and Edge (Legacy) */
+            -ms-overflow-style: none;
+        }
         /* Preview specific styles */
         #preview code { font-family: 'Fira Code', monospace; background: rgba(125,125,125,0.1); padding: 2px 4px; border-radius: 4px; }
         #preview pre code { background: transparent; padding: 0; }
@@ -140,24 +154,89 @@
 </div>
 
 <div class="workspace">
-    <textarea id="editor" spellcheck="false" oninput="render()"># OneEdit
+    <div id="line-numbers" style="display:none">1</div>
+    <textarea id="editor" spellcheck="false" oninput="render()" ># OneEdit
 ## Activate your text mind fast
 No need for weird app "ugh".
 
 ```python
 def oneEdit():
     return "Simple is better than complex."
-```
-    </textarea>
+```</textarea>
     <div id="preview"></div>
 </div>
 
 <script>
     const editor = document.getElementById('editor');
+    const lineNumbers = document.getElementById('line-numbers');
     const preview = document.getElementById('preview');
     const extraTools = document.getElementById('extraTools');
     const activeLabel = document.getElementById('active-label');
 
+    editor.onscroll = function() {
+        lineNumbers.scrollTop = editor.scrollTop;
+
+        // const scrolledPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+        // lineNumbers.scrollTop = scrolledPercentage * (lineNumbers.scrollHeight - lineNumbers.clientHeight);
+    };
+
+    editor.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const value = editor.value;
+            const tabChar = "    "; // 4 spaces
+
+            // Find the start of the first line and the end of the last line in the selection
+            const startLine = value.lastIndexOf('\n', start - 1) + 1;
+            const endLine = value.indexOf('\n', end);
+            const adjustedEnd = endLine === -1 ? value.length : endLine;
+
+            // Get the text of the lines to be indented/un-indented
+            const selectedText = value.substring(startLine, adjustedEnd);
+            const lines = selectedText.split('\n');
+            
+            let newLines;
+            let selectionOffset = 0;
+
+            if (e.shiftKey) {
+                // --- UN-INDENTING (Shift + Tab) ---
+                newLines = lines.map(line => {
+                    if (line.startsWith(tabChar)) {
+                        selectionOffset -= tabChar.length;
+                        return line.substring(tabChar.length);
+                    }
+                    return line;
+                });
+            } else {
+                // --- INDENTING (Tab) ---
+                // If it's a multi-line selection or we want to indent the whole line
+                newLines = lines.map(line => {
+                    selectionOffset += tabChar.length;
+                    return tabChar + line;
+                });
+            }
+
+            // Apply the changes
+            const replacement = newLines.join('\n');
+            editor.value = value.substring(0, startLine) + replacement + value.substring(adjustedEnd);
+
+            // Refine selection: Keep the highlighted block highlighted
+            if (start !== end) {
+                editor.selectionStart = startLine;
+                editor.selectionEnd = startLine + replacement.length;
+            } else {
+                // For single cursor, move it relative to the change
+                const newPos = Math.max(startLine, start + (e.shiftKey ? -tabChar.length : tabChar.length));
+                editor.selectionStart = editor.selectionEnd = newPos;
+            }
+
+            if (typeof render === "function") render();
+        }
+    });
+    
     function init() {
         const savedTheme = localStorage.getItem('one-theme') || 'dark';
         setTheme(savedTheme);
@@ -181,16 +260,21 @@ def oneEdit():
         
         if (nextView === 'preview') {
             editor.style.display = 'none';
+            lineNumbers.style.display = 'none';
             preview.style.display = 'block';
             render();
         } else {
             editor.style.display = 'block';
+            lineNumbers.style.display = 'block';
             preview.style.display = 'none';
         }
     }
 
     function render() {
         const mode = document.getElementById('modeSelect').value;
+        const lines = editor.value.split('\n').length;
+        lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
+
         if (mode === 'markdown') {
             // Parse Markdown
             preview.innerHTML = marked.parse(editor.value);
